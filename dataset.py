@@ -23,6 +23,22 @@ POSITIVE_WORDS = [
     "chill",
     "relaxed",
     "amazing",
+    "wonderful",
+    "proud",
+    "beautiful",
+    "fantastic",
+    "joy",
+    "grateful",
+    "blessed",
+    "fire",
+    "lit",
+    "dope",
+    "goated",
+    "slaps",
+    "vibe",
+    "hyped",
+    "hopeful",
+    "vibing",
 ]
 
 NEGATIVE_WORDS = [
@@ -36,7 +52,25 @@ NEGATIVE_WORDS = [
     "stressed",
     "hate",
     "boring",
+    "annoyed",
+    "frustrated",
+    "miserable",
+    "depressed",
+    "disappointing",
+    "trash",
+    "mid",
+    "cringe",
+    "sus",
+    "toxic",
+    "drained",
+    "overwhelmed",
+    "exhausted",
+    "hard",
 ]
+
+# Emoji sentiment signals used by the rule-based analyzer
+POSITIVE_EMOJIS = ["😊", "😂", "🔥", "❤️", "💯", "🙌", "😍", "🥳", ":)", "^^"]
+NEGATIVE_EMOJIS = ["😢", "😡", "💀", "😤", "🥲", ":(", "😞", "😭"]
 
 # ---------------------------------------------------------------------
 # Starter labeled dataset
@@ -50,6 +84,17 @@ SAMPLE_POSTS = [
     "This is fine",
     "So excited for the weekend",
     "I am not happy about this",
+    # --- New posts: slang, emojis, sarcasm, mixed emotions, ambiguity ---
+    "Lowkey stressed but kind of proud of myself",
+    "This song is fire 🔥🔥🔥",
+    "I absolutely love getting stuck in traffic",
+    "just vibing rn honestly",
+    "I'm fine 🥲",
+    "ngl that exam was mid at best",
+    "I'm exhausted but we got the W 🙌",
+    "bruh this is so boring I can't 💀",
+    "Grateful for today, even though it was hard",
+    "whatever I don't even care anymore",
 ]
 
 # Human labels for each post above.
@@ -59,36 +104,26 @@ SAMPLE_POSTS = [
 #   - "neutral"
 #   - "mixed"
 TRUE_LABELS = [
-    "positive",  # "I love this class so much"
-    "negative",  # "Today was a terrible day"
-    "mixed",     # "Feeling tired but kind of hopeful"
-    "neutral",   # "This is fine"
-    "positive",  # "So excited for the weekend"
-    "negative",  # "I am not happy about this"
+    "positive",   # "I love this class so much"
+    "negative",   # "Today was a terrible day"
+    "mixed",      # "Feeling tired but kind of hopeful"
+    "neutral",    # "This is fine"
+    "positive",   # "So excited for the weekend"
+    "negative",   # "I am not happy about this"
+    # --- Labels for new posts ---
+    "mixed",      # "Lowkey stressed but kind of proud of myself"
+    "positive",   # "This song is fire 🔥🔥🔥"
+    "negative",   # "I absolutely love getting stuck in traffic" (sarcasm)
+    "positive",   # "just vibing rn honestly"
+    "negative",   # "I'm fine 🥲" (sarcastic/sad emoji contradicts words)
+    "negative",   # "ngl that exam was mid at best"
+    "mixed",      # "I'm exhausted but we got the W 🙌"
+    "negative",   # "bruh this is so boring I can't 💀"
+    "mixed",      # "Grateful for today, even though it was hard"
+    "negative",   # "whatever I don't even care anymore"
 ]
 
-# TODO: Add 5-10 more posts and labels.
-#
-# Requirements:
-#   - For every new post you add to SAMPLE_POSTS, you must add one
-#     matching label to TRUE_LABELS.
-#   - SAMPLE_POSTS and TRUE_LABELS must always have the same length.
-#   - Include a variety of language styles, such as:
-#       * Slang ("lowkey", "highkey", "no cap")
-#       * Emojis (":)", ":(", "🥲", "😂", "💀")
-#       * Sarcasm ("I absolutely love getting stuck in traffic")
-#       * Ambiguous or mixed feelings
-#
-# Tips:
-#   - Try to create some examples that are hard to label even for you.
-#   - Make a note of any examples that you and a friend might disagree on.
-#     Those "edge cases" are interesting to inspect for both the rule based
-#     and ML models.
-#
-# Example of how you might extend the lists:
-#
-# SAMPLE_POSTS.append("Lowkey stressed but kind of proud of myself")
-# TRUE_LABELS.append("mixed")
-#
-# Remember to keep them aligned:
-#   len(SAMPLE_POSTS) == len(TRUE_LABELS)
+# Sanity check: posts and labels must stay aligned.
+assert len(SAMPLE_POSTS) == len(TRUE_LABELS), (
+    f"Mismatch: {len(SAMPLE_POSTS)} posts vs {len(TRUE_LABELS)} labels"
+)

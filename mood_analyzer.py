@@ -2,21 +2,37 @@
 """
 Rule based mood analyzer for short text snippets.
 
-This class starts with very simple logic:
-  - Preprocess the text
-  - Look for positive and negative words
-  - Compute a numeric score
-  - Convert that score into a mood label
+This class uses:
+  - Preprocessing with punctuation removal and emoji extraction
+  - Positive/negative word matching with negation handling
+  - Emoji sentiment signals
+  - A numeric score mapped to mood labels (positive, negative, neutral, mixed)
 """
 
-from typing import List, Dict, Tuple, Optional
+import re
+from typing import List, Optional
 
-from dataset import POSITIVE_WORDS, NEGATIVE_WORDS
+from dataset import POSITIVE_WORDS, NEGATIVE_WORDS, POSITIVE_EMOJIS, NEGATIVE_EMOJIS
+
+
+# Words that flip the sentiment of the next token
+NEGATION_WORDS = {"not", "no", "never", "don't", "dont", "isn't", "isnt",
+                  "wasn't", "wasnt", "can't", "cant", "won't", "wont",
+                  "wouldn't", "wouldnt", "shouldn't", "shouldnt", "hardly",
+                  "barely", "neither", "nor"}
+
+# Sarcasm amplifiers: when "absolutely/totally/really" appear before a positive
+# word AND the text also contains a known negative-context word, it's likely sarcastic.
+SARCASM_AMPLIFIERS = {"absolutely", "totally", "just", "really", "so", "obviously"}
+NEGATIVE_CONTEXT_WORDS = {"traffic", "stuck", "waiting", "line", "hours",
+                          "monday", "broken", "fail", "failed", "late",
+                          "delayed", "cancelled", "canceled", "dying"}
 
 
 class MoodAnalyzer:
     """
-    A very simple, rule based mood classifier.
+    A rule based mood classifier with negation handling, emoji signals,
+    and slang awareness.
     """
 
     def __init__(
@@ -24,130 +40,204 @@ class MoodAnalyzer:
         positive_words: Optional[List[str]] = None,
         negative_words: Optional[List[str]] = None,
     ) -> None:
-        # Use the default lists from dataset.py if none are provided.
         positive_words = positive_words if positive_words is not None else POSITIVE_WORDS
         negative_words = negative_words if negative_words is not None else NEGATIVE_WORDS
 
-        # Store as sets for faster lookup.
         self.positive_words = set(w.lower() for w in positive_words)
         self.negative_words = set(w.lower() for w in negative_words)
+        self.positive_emojis = set(POSITIVE_EMOJIS)
+        self.negative_emojis = set(NEGATIVE_EMOJIS)
 
-    # ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
     # Preprocessing
-    # ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
 
     def preprocess(self, text: str) -> List[str]:
         """
-        Convert raw text into a list of tokens the model can work with.
+        Convert raw text into a list of tokens.
 
-        TODO: Improve this method.
-
-        Right now, it does the minimum:
-          - Strips leading and trailing whitespace
-          - Converts everything to lowercase
-          - Splits on spaces
-
-        Ideas to improve:
-          - Remove punctuation
-          - Handle simple emojis separately (":)", ":-(", "🥲", "😂")
-          - Normalize repeated characters ("soooo" -> "soo")
+        Steps:
+          1. Lowercase and strip whitespace
+          2. Extract emojis as separate tokens
+          3. Remove punctuation (except apostrophes inside words)
+          4. Split on whitespace
         """
         cleaned = text.strip().lower()
-        tokens = cleaned.split()
 
+        # Pull out unicode emojis and text emojis before stripping punctuation
+        emojis_found = []
+        for emoji in (self.positive_emojis | self.negative_emojis):
+            while emoji in cleaned:
+                emojis_found.append(emoji)
+                cleaned = cleaned.replace(emoji, " ", 1)
+
+        # Remove punctuation but keep apostrophes inside contractions
+        cleaned = re.sub(r"[^\w\s']", " ", cleaned)
+        # Collapse multiple spaces
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+        tokens = cleaned.split()
+        tokens.extend(emojis_found)
         return tokens
 
-    # ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
     # Scoring logic
-    # ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
 
     def score_text(self, text: str) -> int:
         """
-        Compute a numeric "mood score" for the given text.
+        Compute a numeric mood score for the given text.
 
-        Positive words increase the score.
-        Negative words decrease the score.
-
-        TODO: You must choose AT LEAST ONE modeling improvement to implement.
-        For example:
-          - Handle simple negation such as "not happy" or "not bad"
-          - Count how many times each word appears instead of just presence
-          - Give some words higher weights than others (for example "hate" < "annoyed")
-          - Treat emojis or slang (":)", "lol", "💀") as strong signals
+        Enhancements implemented:
+          - Negation handling: "not happy" flips the score contribution
+          - Emoji signals: positive emojis add +1, negative emojis subtract -1
+          - Sarcasm detection: amplifier + positive word + negative context → flip
+          - Each positive word → +1, each negative word → -1
         """
-        # TODO: Implement this method.
-        #   1. Call self.preprocess(text) to get tokens.
-        #   2. Loop over the tokens.
-        #   3. Increase the score for positive words, decrease for negative words.
-        #   4. Return the total score.
-        #
-        # Hint: if you implement negation, you may want to look at pairs of tokens,
-        # like ("not", "happy") or ("never", "fun").
-        pass
+        tokens = self.preprocess(text)
+        score = 0
+        negate = False
 
-    # ---------------------------------------------------------------------
+        # Sarcasm check: if text has an amplifier before a positive word
+        # AND contains a negative-context word, flip positive contributions.
+        has_negative_context = any(t in NEGATIVE_CONTEXT_WORDS for t in tokens)
+        has_amplifier = any(t in SARCASM_AMPLIFIERS for t in tokens)
+        sarcasm_flip = has_negative_context and has_amplifier
+
+        for token in tokens:
+            if token in self.positive_emojis:
+                score += 1
+                continue
+            if token in self.negative_emojis:
+                score -= 1
+                continue
+
+            if token in NEGATION_WORDS:
+                negate = True
+                continue
+
+            if token in SARCASM_AMPLIFIERS or token in NEGATIVE_CONTEXT_WORDS:
+                negate = False
+                continue
+
+            if token in self.positive_words:
+                if negate:
+                    score -= 1
+                elif sarcasm_flip:
+                    score -= 1  # sarcasm: treat positive word as negative
+                else:
+                    score += 1
+                negate = False
+            elif token in self.negative_words:
+                score += 1 if negate else -1
+                negate = False
+            else:
+                negate = False
+
+        return score
+
+    # -----------------------------------------------------------------
     # Label prediction
-    # ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
 
     def predict_label(self, text: str) -> str:
         """
-        Turn the numeric score for a piece of text into a mood label.
+        Convert the numeric score into a mood label.
 
-        The default mapping is:
-          - score > 0  -> "positive"
-          - score < 0  -> "negative"
-          - score == 0 -> "neutral"
+        We also check whether the text has BOTH positive and negative
+        signals — if so, it's "mixed" regardless of the net score.
 
-        TODO: You can adjust this mapping if it makes sense for your model.
-        For example:
-          - Use different thresholds (for example score >= 2 to be "positive")
-          - Add a "mixed" label for scores close to zero
-        Just remember that whatever labels you return should match the labels
-        you use in TRUE_LABELS in dataset.py if you care about accuracy.
+        Mapping:
+          has both positive and negative signals → "mixed"
+          score > 0  → "positive"
+          score < 0  → "negative"
+          score == 0 → "neutral"
         """
-        # TODO: Implement this method.
-        #   1. Call self.score_text(text) to get the numeric score.
-        #   2. Return "positive" if the score is above 0.
-        #   3. Return "negative" if the score is below 0.
-        #   4. Return "neutral" otherwise.
-        pass
+        tokens = self.preprocess(text)
+        score = self.score_text(text)
 
-    # ---------------------------------------------------------------------
-    # Explanations (optional but recommended)
-    # ---------------------------------------------------------------------
+        # Detect mixed: count raw positive and negative signals
+        has_pos = any(
+            t in self.positive_words or t in self.positive_emojis for t in tokens
+        )
+        has_neg = any(
+            t in self.negative_words or t in self.negative_emojis for t in tokens
+        )
+
+        if has_pos and has_neg:
+            return "mixed"
+        elif score > 0:
+            return "positive"
+        elif score < 0:
+            return "negative"
+        else:
+            return "neutral"
+
+    # -----------------------------------------------------------------
+    # Explanations
+    # -----------------------------------------------------------------
 
     def explain(self, text: str) -> str:
         """
         Return a short string explaining WHY the model chose its label.
-
-        TODO:
-          - Look at the tokens and identify which ones counted as positive
-            and which ones counted as negative.
-          - Show the final score.
-          - Return a short human readable explanation.
-
-        Example explanation (your exact wording can be different):
-          'Score = 2 (positive words: ["love", "great"]; negative words: [])'
-
-        The current implementation is a placeholder so the code runs even
-        before you implement it.
+        Shows matched positive/negative tokens, emoji hits, sarcasm detection,
+        and the final score.
         """
         tokens = self.preprocess(text)
-
         positive_hits: List[str] = []
         negative_hits: List[str] = []
+        emoji_hits: List[str] = []
         score = 0
+        negate = False
+
+        has_negative_context = any(t in NEGATIVE_CONTEXT_WORDS for t in tokens)
+        has_amplifier = any(t in SARCASM_AMPLIFIERS for t in tokens)
+        sarcasm_flip = has_negative_context and has_amplifier
 
         for token in tokens:
-            if token in self.positive_words:
-                positive_hits.append(token)
+            if token in self.positive_emojis:
+                emoji_hits.append(token)
                 score += 1
-            if token in self.negative_words:
-                negative_hits.append(token)
+                continue
+            if token in self.negative_emojis:
+                emoji_hits.append(token)
                 score -= 1
+                continue
 
+            if token in NEGATION_WORDS:
+                negate = True
+                continue
+
+            if token in SARCASM_AMPLIFIERS or token in NEGATIVE_CONTEXT_WORDS:
+                negate = False
+                continue
+
+            if token in self.positive_words:
+                if negate:
+                    negative_hits.append(f"not-{token}")
+                    score -= 1
+                elif sarcasm_flip:
+                    negative_hits.append(f"sarcasm-{token}")
+                    score -= 1
+                else:
+                    positive_hits.append(token)
+                    score += 1
+                negate = False
+            elif token in self.negative_words:
+                if negate:
+                    positive_hits.append(f"not-{token}")
+                    score += 1
+                else:
+                    negative_hits.append(token)
+                    score -= 1
+                negate = False
+            else:
+                negate = False
+
+        sarcasm_note = " [SARCASM DETECTED]" if sarcasm_flip else ""
         return (
-            f"Score = {score} "
+            f"Score = {score}{sarcasm_note} "
             f"(positive: {positive_hits or '[]'}, "
-            f"negative: {negative_hits or '[]'})"
+            f"negative: {negative_hits or '[]'}, "
+            f"emojis: {emoji_hits or '[]'})"
         )
